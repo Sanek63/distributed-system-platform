@@ -1447,9 +1447,6 @@
               "operator": "=",
               "scope": "resource",
               "tag": "service.name",
-              "value": [
-                "platform-api"
-              ],
               "valueType": "string"
             }
           ],
@@ -1473,10 +1470,6 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "platform-api",
-          "value": "platform-api"
-        },
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
