@@ -1,63 +1,54 @@
+using System.Collections.Concurrent;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using PlatformApi.Models;
-using System.Collections.Concurrent;
 
 namespace PlatformApi.Services;
 
 public class FailureSimulationService
 {
-    private readonly DockerClient _dockerClient;
-    private readonly ILogger<FailureSimulationService> _logger;
-    private readonly ConcurrentDictionary<string, FailureStatus> _activeFailures = new();
-    private readonly string _pumbaImage = "gaiaadm/pumba:0.10.0";
-    private readonly string _iproute2Image = "gaiadocker/iproute2";
-    private readonly string _networkName;
-
     public FailureSimulationService(ILogger<FailureSimulationService> logger, IConfiguration configuration)
     {
         _logger = logger;
-        _networkName = configuration["Docker:NetworkName"] ?? "distributed-system-platform_default";
-
-        var dockerHost = configuration["Docker:Host"] ?? "unix:///var/run/docker.sock";
+        string dockerHost = configuration["Docker:Host"] ?? "unix:///var/run/docker.sock";
         _dockerClient = new DockerClientConfiguration(new Uri(dockerHost)).CreateClient();
     }
 
-    public async Task<NetworkDelayResponse> ApplyNetworkDelayAsync(NetworkDelayRequest request)
+    public async Task<NetworkDelayResponse> ApplyNetworkDelay(NetworkDelayRequest request)
     {
-        var failureId = $"pumba-delay-{Guid.NewGuid():N}";
+        string failureId = $"pumba-delay-{Guid.NewGuid():N}";
 
         try
         {
-            await PullImageIfNotExistsAsync(_pumbaImage);
-            await PullImageIfNotExistsAsync(_iproute2Image);
+            await PullImageIfNotExistsAsync(PumbaImage);
+            await PullImageIfNotExistsAsync(Iproute2Image);
 
-            var cmd = new List<string>
-            {
+            List<string> cmd =
+            [
                 "--log-level", "info",
                 "netem",
                 "--duration", $"{request.DurationSeconds}s",
-                "--tc-image", _iproute2Image,
+                "--tc-image", Iproute2Image,
                 "delay",
                 "--time", request.DelayMs.ToString()
-            };
+            ];
 
             if (request.JitterMs > 0)
             {
                 cmd.Add("--jitter");
-                cmd.Add(request.JitterMs.ToString());
+                cmd.Add(request.JitterMs.ToString()!);
             }
 
             cmd.Add($"re2:^{request.ContainerName}$");
 
-            var createResponse = await _dockerClient.Containers.CreateContainerAsync(new CreateContainerParameters
+            CreateContainerResponse? createResponse = await _dockerClient.Containers.CreateContainerAsync(new()
             {
-                Image = _pumbaImage,
+                Image = PumbaImage,
                 Name = failureId,
                 Cmd = cmd,
-                HostConfig = new HostConfig
+                HostConfig = new()
                 {
-                    Binds = new[] { "/var/run/docker.sock:/var/run/docker.sock:ro" },
+                    Binds = ["/var/run/docker.sock:/var/run/docker.sock:ro"],
                     NetworkMode = "host",
                     AutoRemove = false,
                     Privileged = true
@@ -70,16 +61,15 @@ public class FailureSimulationService
                 }
             });
 
-            await _dockerClient.Containers.StartContainerAsync(createResponse.ID, new ContainerStartParameters());
+            await _dockerClient.Containers.StartContainerAsync(createResponse.ID, new());
 
-            var failure = new FailureStatus(
+            FailureStatus failure = new(
                 Id: failureId,
                 Type: "network-delay",
                 ContainerName: request.ContainerName,
                 Status: "active",
                 StartedAt: DateTime.UtcNow,
-                ExpiresAt: DateTime.UtcNow.AddSeconds(request.DurationSeconds)
-            );
+                ExpiresAt: DateTime.UtcNow.AddSeconds(request.DurationSeconds));
             _activeFailures[failureId] = failure;
 
             _ = MonitorFailureAsync(failureId, createResponse.ID);
@@ -88,16 +78,15 @@ public class FailureSimulationService
                 "Applied network delay of {DelayMs}ms (jitter: {JitterMs}ms) to container {Container} for {Duration}s",
                 request.DelayMs, request.JitterMs, request.ContainerName, request.DurationSeconds);
 
-            return new NetworkDelayResponse(
+            return new(
                 failureId,
                 "active",
-                $"Network delay of {request.DelayMs}ms applied to {request.ContainerName} for {request.DurationSeconds}s"
-            );
+                $"Network delay of {request.DelayMs}ms applied to {request.ContainerName} for {request.DurationSeconds}s");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to apply network delay to container {Container}", request.ContainerName);
-            return new NetworkDelayResponse(failureId, "failed", ex.Message);
+            return new(failureId, "failed", ex.Message);
         }
     }
 
@@ -105,7 +94,7 @@ public class FailureSimulationService
     {
         try
         {
-            var containers = await _dockerClient.Containers.ListContainersAsync(new ContainersListParameters
+            IList<ContainerListResponse>? containers = await _dockerClient.Containers.ListContainersAsync(new()
             {
                 All = true,
                 Filters = new Dictionary<string, IDictionary<string, bool>>
@@ -114,44 +103,45 @@ public class FailureSimulationService
                 }
             });
 
-            var container = containers.FirstOrDefault();
+            ContainerListResponse? container = containers.FirstOrDefault();
             if (container == null)
             {
                 _activeFailures.TryRemove(failureId, out _);
-                return new NetworkDelayResponse(failureId, "not_found", "Failure simulation not found");
+                return new(failureId, "not_found", "Failure simulation not found");
             }
 
-            await _dockerClient.Containers.StopContainerAsync(container.ID, new ContainerStopParameters
+            await _dockerClient.Containers.StopContainerAsync(container.ID, new()
             {
                 WaitBeforeKillSeconds = 2
             });
 
-            await _dockerClient.Containers.RemoveContainerAsync(container.ID, new ContainerRemoveParameters { Force = true });
+            await _dockerClient.Containers.RemoveContainerAsync(container.ID,
+                new() { Force = true });
 
-            if (_activeFailures.TryGetValue(failureId, out var failure))
+            if (_activeFailures.TryGetValue(failureId, out FailureStatus? failure))
             {
                 _activeFailures[failureId] = failure with { Status = "stopped" };
             }
 
             _logger.LogInformation("Stopped failure simulation {FailureId}", failureId);
-            return new NetworkDelayResponse(failureId, "stopped", "Failure simulation stopped");
+            return new(failureId, "stopped", "Failure simulation stopped");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to stop failure simulation {FailureId}", failureId);
-            return new NetworkDelayResponse(failureId, "error", ex.Message);
+            return new(failureId, "error", ex.Message);
         }
     }
 
     public ActiveFailuresResponse GetActiveFailures()
     {
         CleanupExpiredFailures();
-        return new ActiveFailuresResponse(_activeFailures.Values.ToList());
+        return new(_activeFailures.Values.ToList());
     }
 
     public async Task<List<string>> GetAvailableContainersAsync()
     {
-        var containers = await _dockerClient.Containers.ListContainersAsync(new ContainersListParameters
+        IList<ContainerListResponse>? containers = await _dockerClient.Containers.ListContainersAsync(new()
         {
             Filters = new Dictionary<string, IDictionary<string, bool>>
             {
@@ -171,19 +161,22 @@ public class FailureSimulationService
     {
         try
         {
-            var waitResponse = await _dockerClient.Containers.WaitContainerAsync(containerId);
+            ContainerWaitResponse? waitResponse = await _dockerClient.Containers.WaitContainerAsync(containerId);
 
-            if (_activeFailures.TryGetValue(failureId, out var failure))
+            if (_activeFailures.TryGetValue(failureId, out FailureStatus? failure))
             {
-                var status = waitResponse.StatusCode == 0 ? "completed" : "failed";
+                string status = waitResponse.StatusCode == 0 ? "completed" : "failed";
                 _activeFailures[failureId] = failure with { Status = status };
             }
 
             try
             {
-                await _dockerClient.Containers.RemoveContainerAsync(containerId, new ContainerRemoveParameters());
+                await _dockerClient.Containers.RemoveContainerAsync(containerId, new());
             }
-            catch { }
+            catch
+            {
+                // ignored
+            }
         }
         catch (Exception ex)
         {
@@ -193,15 +186,15 @@ public class FailureSimulationService
 
     private void CleanupExpiredFailures()
     {
-        var now = DateTime.UtcNow;
-        var expired = _activeFailures
+        DateTime now = DateTime.UtcNow;
+        List<string> expired = _activeFailures
             .Where(kvp => kvp.Value.ExpiresAt.HasValue && kvp.Value.ExpiresAt < now)
             .Select(kvp => kvp.Key)
             .ToList();
 
-        foreach (var id in expired)
+        foreach (string id in expired)
         {
-            if (_activeFailures.TryGetValue(id, out var failure) && failure.Status == "active")
+            if (_activeFailures.TryGetValue(id, out FailureStatus? failure) && failure.Status == "active")
             {
                 _activeFailures[id] = failure with { Status = "completed" };
             }
@@ -215,18 +208,26 @@ public class FailureSimulationService
             await _dockerClient.Images.InspectImageAsync(imageName);
             _logger.LogDebug("Image {Image} already exists", imageName);
         }
-        catch (Docker.DotNet.DockerImageNotFoundException)
+        catch (DockerImageNotFoundException)
         {
             _logger.LogInformation("Pulling image {Image}...", imageName);
             await _dockerClient.Images.CreateImageAsync(
-                new ImagesCreateParameters { FromImage = imageName },
+                new() { FromImage = imageName },
                 null,
                 new Progress<JSONMessage>(m =>
                 {
                     if (!string.IsNullOrEmpty(m.Status))
+                    {
                         _logger.LogDebug("Pull: {Status}", m.Status);
+                    }
                 }));
             _logger.LogInformation("Image {Image} pulled successfully", imageName);
         }
     }
+
+    private const string PumbaImage = "gaiaadm/pumba:0.10.0";
+    private const string Iproute2Image = "gaiadocker/iproute2";
+    private readonly DockerClient _dockerClient;
+    private readonly ILogger<FailureSimulationService> _logger;
+    private readonly ConcurrentDictionary<string, FailureStatus> _activeFailures = new();
 }
