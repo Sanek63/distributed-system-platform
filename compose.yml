@@ -149,6 +149,43 @@ services:
     networks:
       - platform-network
 
+  # ==================== DeliveryGuarantees Example Services ====================
+
+  delivery-sender:
+    build:
+      context: ./Examples/DeliveryGuarantees/ServiceA
+      dockerfile: Dockerfile
+    container_name: delivery-sender
+    environment:
+      - ServiceB__Url=http://delivery-receiver
+    ports:
+      - "10011:80"
+    depends_on:
+      - otel-collector
+      - delivery-receiver
+    labels:
+      - "platform=distributed-system-platform"
+      - "type=application"
+      - "service=delivery-sender"
+    networks:
+      - platform-network
+
+  delivery-receiver:
+    build:
+      context: ./Examples/DeliveryGuarantees/ServiceB
+      dockerfile: Dockerfile
+    container_name: delivery-receiver
+    ports:
+      - "10012:80"
+    depends_on:
+      - otel-collector
+    labels:
+      - "platform=distributed-system-platform"
+      - "type=application"
+      - "service=delivery-receiver"
+    networks:
+      - platform-network
+
 networks:
   platform-network:
     driver: bridge
