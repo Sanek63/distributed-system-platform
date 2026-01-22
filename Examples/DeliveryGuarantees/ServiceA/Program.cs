@@ -39,9 +39,10 @@ WebApplication app = builder.Build();
 app.MapPost("/api/message", async (IHttpClientFactory httpClientFactory) =>
 {
     string messageId = Guid.NewGuid().ToString();
+    messagesSentCounter.Add(1, new TagList { { "message_id", messageId } });
+
     HttpClient client = httpClientFactory.CreateClient("ServiceB");
     await client.PostAsJsonAsync("/api/message", new { MessageId = messageId });
-    messagesSentCounter.Add(1, new TagList { { "message_id", messageId } });
     return Results.Ok();
 });
 
