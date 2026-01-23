@@ -1,29 +1,48 @@
 # Гарантии доставки сообщений
 
-### Модель системы
+## Модель системы
 
-- Сервис DeliverySender
-    - API
-        - POST: /api/message
-            1. Генерация messageId (GUID)
-            2. Регистрация метрики delivery_messages_sent_total (label: message_id)
-            3. HTTP-вызов
-                - POST: http://delivery-receiver/api/message
-                - Body: { "messageId" : messageId }
-                - Http client timeout = 1s
-- Сервис DeliveryReceiver
-    - API
-        - POST: /api/message
-        - Body: { "messageId" : messageId }
-            1. Регистрация метрики delivery_messages_received_total (label: message_id)
-- Основные метрики
-    - Dashboard Delivery Guarantees
-    - Отправленные сообщения (по message_id)
-    - Полученные сообщения (по message_id)
-    - Количество потерянных сообщений
-    - Количество повторно обработанных сообщений
+```mermaid
+flowchart LR
+    subgraph Platform
+        TrafficGenerator[Traffic Generator]
+        Prometheus[(Prometheus)]
+        Grafana[Grafana Dashboard]
+    end
+    subgraph System
+        DeliverySender[DeliverySender]
+        DeliveryReceiver[DeliveryReceiver]
+    end
 
-### Сценарий 1. Отсутствие проверок
+    TrafficGenerator -->|POST /api/message| DeliverySender
+    DeliverySender -->|POST /api/message<br>message_id| DeliveryReceiver
+    DeliverySender -.->|"delivery_messages_sent_total{message_id}"| Prometheus
+    DeliveryReceiver -.->|"delivery_messages_received_total{message_id}"| Prometheus
+    Prometheus --> Grafana
+```
+
+### Сервис DeliverySender
+
+**POST /api/message** — отправка сообщения
+1. Генерирует `messageId` (GUID)
+2. Регистрирует метрику `delivery_messages_sent_total{message_id}`
+3. Отправляет HTTP POST на `http://delivery-receiver/api/message`
+   - Body: `{ "messageId": "..." }`
+   - Timeout: 1s
+
+### Сервис DeliveryReceiver
+
+**POST /api/message** — приём сообщения
+- Принимает `{ "messageId": "..." }`
+- Регистрирует метрику `delivery_messages_received_total{message_id}`
+
+### Метрики (Dashboard: Delivery Guarantees)
+- Messages Sent (unique) — отправленные сообщения
+- Messages Received (unique) — полученные сообщения
+- Message Loss (unique IDs not received) — потерянные сообщения
+- Duplicates (IDs received > 1 time) - повторно обработанные сообщения
+
+## Сценарий 1 - at-most-once
 
 1. Запустить платформу с сервисами DeliverySender и DeliveryReceiver
 2. Запустить генерацию трафика на DeliverySender
