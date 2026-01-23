@@ -21,14 +21,14 @@ public class FailureSimulationService
         try
         {
             await PullImageIfNotExistsAsync(PumbaImage);
-            await PullImageIfNotExistsAsync(Iproute2Image);
+            await PullImageIfNotExistsAsync(TcImage);
 
             List<string> cmd =
             [
                 "--log-level", "info",
                 "netem",
                 "--duration", $"{request.DurationSeconds}s",
-                "--tc-image", Iproute2Image,
+                "--tc-image", TcImage,
                 "delay",
                 "--time", request.DelayMs.ToString()
             ];
@@ -49,8 +49,7 @@ public class FailureSimulationService
                 HostConfig = new()
                 {
                     Binds = ["/var/run/docker.sock:/var/run/docker.sock:ro"],
-                    NetworkMode = "host",
-                    AutoRemove = false,
+                    AutoRemove = true,
                     Privileged = true
                 },
                 Labels = new Dictionary<string, string>
@@ -225,8 +224,8 @@ public class FailureSimulationService
         }
     }
 
-    private const string PumbaImage = "gaiaadm/pumba:0.10.0";
-    private const string Iproute2Image = "gaiadocker/iproute2";
+    private const string PumbaImage = "gaiaadm/pumba:latest";
+    private const string TcImage = "ghcr.io/alexei-led/pumba-alpine-nettools:latest";
     private readonly DockerClient _dockerClient;
     private readonly ILogger<FailureSimulationService> _logger;
     private readonly ConcurrentDictionary<string, FailureStatus> _activeFailures = new();
