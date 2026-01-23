@@ -38,66 +38,6 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "purple",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 4,
-        "x": 0,
-        "y": 1
-      },
-      "id": 16,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "11.3.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(k6_http_reqs_total) or vector(0)",
-          "legendFormat": "K6 Generated",
-          "refId": "A"
-        }
-      ],
-      "title": "K6 Generated",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
                 "color": "blue",
                 "value": null
               }
@@ -109,8 +49,8 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 5,
-        "x": 4,
+        "w": 6,
+        "x": 0,
         "y": 1
       },
       "id": 2,
@@ -169,8 +109,8 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 5,
-        "x": 9,
+        "w": 6,
+        "x": 6,
         "y": 1
       },
       "id": 3,
@@ -237,8 +177,8 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 5,
-        "x": 14,
+        "w": 6,
+        "x": 12,
         "y": 1
       },
       "id": 4,
@@ -305,8 +245,8 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 5,
-        "x": 19,
+        "w": 6,
+        "x": 18,
         "y": 1
       },
       "id": 5,
