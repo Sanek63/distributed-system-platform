@@ -69,10 +69,10 @@ flowchart TB
     Api["Platform WebAPI + swagger"]
     K6["K6 (traffic generator)"]
     Pumba["Pumba (failure management)"]
-    Prometheus["Prometheus"]
+    Prometheus[(Prometheus)]
     OtelCol["OpenTelemetry Collector"]
     Grafana["Grafana"]
-    Tempo["Tempo"]
+    Tempo[("Tempo")]
 
     Api -->|"run job-container"| Pumba
     Api -->|"run job-container"| K6
@@ -104,7 +104,8 @@ flowchart TB
 
 #### Pumba (Failure Management)
 
-Моделирование отказов контейнеров и сети.
+Моделирование отказов контейнеров и сети
+- Запускается как job-контейнер
 - Имеет доступ к Docker API
 - Управляется Platform API
 - Поддерживает:
@@ -116,7 +117,7 @@ flowchart TB
 #### K6 (Traffic Generator)
 
 Генерация нагрузки на распределённую систему
-- Запускается как одноразовый или job-контейнер
+- Запускается как job-контейнер
 - Управляется Platform API
 - Поддерживает различные сценарии нагрузки:
   - постоянная
