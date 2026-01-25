@@ -10,8 +10,6 @@ services:
       - "10001:80"
     labels:
       - "platform=distributed-system-platform"
-      - "type=application"
-      - "service=service-a"
     networks:
       - platform-network
 
@@ -24,8 +22,6 @@ services:
       - "10002:80"
     labels:
       - "platform=distributed-system-platform"
-      - "type=application"
-      - "service=service-b"
     networks:
       - platform-network
 

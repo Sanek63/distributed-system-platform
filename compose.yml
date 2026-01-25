@@ -9,19 +9,8 @@ services:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
       - "8889:8889"   # Prometheus exporter
-      - "13133:13133" # Health check
-    depends_on:
-      - tempo
-    labels:
-      - "platform=distributed-system-platform"
-      - "type=infrastructure"
     networks:
       - platform-network
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
 
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -36,16 +25,8 @@ services:
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
-    labels:
-      - "platform=distributed-system-platform"
-      - "type=infrastructure"
     networks:
       - platform-network
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
 
   tempo:
     image: grafana/tempo:2.6.1
@@ -57,9 +38,6 @@ services:
     ports:
       - "3200:3200"   # Tempo HTTP
       - "14268:14268" # Jaeger ingest
-    labels:
-      - "platform=distributed-system-platform"
-      - "type=infrastructure"
     networks:
       - platform-network
 
@@ -77,12 +55,6 @@ services:
       - grafana-data:/var/lib/grafana
     ports:
       - "3000:3000"
-    depends_on:
-      - prometheus
-      - tempo
-    labels:
-      - "platform=distributed-system-platform"
-      - "type=infrastructure"
     networks:
       - platform-network
 
@@ -100,11 +72,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "5050:8080"
-    depends_on:
-      - otel-collector
-    labels:
-      - "platform=distributed-system-platform"
-      - "type=management"
     networks:
       - platform-network
 
