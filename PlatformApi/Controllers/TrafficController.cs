@@ -38,16 +38,4 @@ public class TrafficController(TrafficGeneratorService trafficService, ILogger<T
     {
         return Ok(trafficService.GetAllJobs());
     }
-
-    [HttpGet("jobs/{jobId}")]
-    public ActionResult<TrafficJobStatus> GetJob(string jobId)
-    {
-        TrafficJobStatus? job = trafficService.GetJob(jobId);
-        if (job == null)
-        {
-            return NotFound();
-        }
-
-        return Ok(job);
-    }
 }

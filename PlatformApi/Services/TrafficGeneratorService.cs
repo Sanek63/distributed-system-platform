@@ -1,40 +1,34 @@
 using System.Collections.Concurrent;
-using Docker.DotNet;
 using Docker.DotNet.Models;
 using PlatformApi.Models;
 
 namespace PlatformApi.Services;
 
-public class TrafficGeneratorService
+public class TrafficGeneratorService(
+    ILogger<TrafficGeneratorService> logger,
+    DockerService dockerService,
+    IConfiguration configuration)
 {
-    public TrafficGeneratorService(ILogger<TrafficGeneratorService> logger, IConfiguration configuration)
-    {
-        _logger = logger;
-        _networkName = configuration["Docker:NetworkName"] ?? "distributed-system-platform_default";
-
-        string dockerHost = configuration["Docker:Host"] ?? "unix:///var/run/docker.sock";
-        _dockerClient = new DockerClientConfiguration(new Uri(dockerHost)).CreateClient();
-    }
-
     public async Task<TrafficGenerationResponse> StartTrafficGenerationAsync(TrafficGenerationRequest request)
     {
         string jobId = $"k6-job-{Guid.NewGuid():N}";
 
         try
         {
-            await PullImageIfNotExistsAsync(K6Image);
+            await dockerService.PullImageIfNotExistsAsync(K6Image);
 
+            int maxVUs = request.MaxVUs ?? 100;
             List<string> envVars =
             [
                 $"TARGET_URL={request.TargetUrl}",
                 $"RPS={request.Rps}",
                 $"DURATION={request.DurationSeconds}s",
-                $"VUS={Math.Min(request.Rps * 2, request.MaxVUs ?? 100)}",
-                $"MAX_VUS={request.MaxVUs ?? 100}",
-                "K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write"
+                $"VUS={Math.Min(request.Rps * 2, maxVUs)}",
+                $"MAX_VUS={maxVUs}",
+                $"K6_PROMETHEUS_RW_SERVER_URL={_prometheusUrl}"
             ];
 
-            CreateContainerResponse? createResponse = await _dockerClient.Containers.CreateContainerAsync(new()
+            CreateContainerResponse? createResponse = await dockerService.Client.Containers.CreateContainerAsync(new()
             {
                 Image = K6Image,
                 Name = jobId,
@@ -43,7 +37,7 @@ public class TrafficGeneratorService
                 HostConfig = new()
                 {
                     Binds = [$"{GetScriptsPath()}:/scripts:ro"],
-                    NetworkMode = _networkName,
+                    NetworkMode = dockerService.NetworkName,
                     AutoRemove = false
                 },
                 Labels = new Dictionary<string, string>
@@ -53,7 +47,7 @@ public class TrafficGeneratorService
                 }
             });
 
-            await _dockerClient.Containers.StartContainerAsync(createResponse.ID, new());
+            await dockerService.Client.Containers.StartContainerAsync(createResponse.ID, new());
 
             TrafficJobStatus job = new(
                 JobId: jobId,
@@ -65,7 +59,7 @@ public class TrafficGeneratorService
 
             _ = MonitorJobAsync(jobId, createResponse.ID);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Started traffic generation job {JobId} targeting {TargetUrl} at {Rps} RPS for {Duration}s",
                 jobId, request.TargetUrl, request.Rps, request.DurationSeconds);
 
@@ -74,7 +68,7 @@ public class TrafficGeneratorService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to start traffic generation job");
+            logger.LogError(ex, "Failed to start traffic generation job");
             return new(jobId, "failed", ex.Message);
         }
     }
@@ -83,52 +77,36 @@ public class TrafficGeneratorService
     {
         try
         {
-            IList<ContainerListResponse>? containers = await _dockerClient.Containers.ListContainersAsync(new()
-            {
-                All = true,
-                Filters = new Dictionary<string, IDictionary<string, bool>>
-                {
-                    ["name"] = new Dictionary<string, bool> { [jobId] = true }
-                }
-            });
-
-            ContainerListResponse? container = containers.FirstOrDefault();
+            ContainerListResponse? container = await dockerService.FindContainerByNameAsync(jobId);
             if (container == null)
             {
                 return new(jobId, "not_found", "Job not found");
             }
 
-            await _dockerClient.Containers.StopContainerAsync(container.ID, new()
-            {
-                WaitBeforeKillSeconds = 5
-            });
-
-            await _dockerClient.Containers.RemoveContainerAsync(container.ID, new() { Force = true });
+            await dockerService.StopAndRemoveContainerAsync(container.ID, 5);
 
             if (_jobs.TryGetValue(jobId, out TrafficJobStatus? job))
             {
                 _jobs[jobId] = job with { Status = "stopped", FinishedAt = DateTime.UtcNow };
             }
 
-            _logger.LogInformation("Stopped traffic generation job {JobId}", jobId);
+            logger.LogInformation("Stopped traffic generation job {JobId}", jobId);
             return new(jobId, "stopped", "Traffic generation stopped");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to stop traffic generation job {JobId}", jobId);
+            logger.LogError(ex, "Failed to stop traffic generation job {JobId}", jobId);
             return new(jobId, "error", ex.Message);
         }
     }
 
     public IEnumerable<TrafficJobStatus> GetAllJobs() => _jobs.Values.ToList();
 
-    public TrafficJobStatus? GetJob(string jobId) => _jobs.TryGetValue(jobId, out TrafficJobStatus? job) ? job : null;
-
     private async Task MonitorJobAsync(string jobId, string containerId)
     {
         try
         {
-            ContainerWaitResponse? waitResponse = await _dockerClient.Containers.WaitContainerAsync(containerId);
+            ContainerWaitResponse waitResponse = await dockerService.WaitContainerAsync(containerId);
 
             if (_jobs.TryGetValue(jobId, out TrafficJobStatus? job))
             {
@@ -136,43 +114,10 @@ public class TrafficGeneratorService
                 string? error = waitResponse.StatusCode != 0 ? $"Exit code: {waitResponse.StatusCode}" : null;
                 _jobs[jobId] = job with { Status = status, FinishedAt = DateTime.UtcNow, Error = error };
             }
-
-            try
-            {
-                await _dockerClient.Containers.RemoveContainerAsync(containerId, new());
-            }
-            catch
-            {
-                // ignored
-            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error monitoring job {JobId}", jobId);
-        }
-    }
-
-    private async Task PullImageIfNotExistsAsync(string imageName)
-    {
-        try
-        {
-            await _dockerClient.Images.InspectImageAsync(imageName);
-            _logger.LogDebug("Image {Image} already exists", imageName);
-        }
-        catch (DockerImageNotFoundException)
-        {
-            _logger.LogInformation("Pulling image {Image}...", imageName);
-            await _dockerClient.Images.CreateImageAsync(
-                new() { FromImage = imageName },
-                null,
-                new Progress<JSONMessage>(m =>
-                {
-                    if (!string.IsNullOrEmpty(m.Status))
-                    {
-                        _logger.LogDebug("Pull: {Status}", m.Status);
-                    }
-                }));
-            _logger.LogInformation("Image {Image} pulled successfully", imageName);
+            logger.LogError(ex, "Error monitoring job {JobId}", jobId);
         }
     }
 
@@ -183,8 +128,6 @@ public class TrafficGeneratorService
     }
 
     private const string K6Image = "grafana/k6:0.54.0";
-    private readonly DockerClient _dockerClient;
-    private readonly ILogger<TrafficGeneratorService> _logger;
+    private readonly string _prometheusUrl = configuration["K6:PrometheusUrl"]!;
     private readonly ConcurrentDictionary<string, TrafficJobStatus> _jobs = new();
-    private readonly string _networkName;
 }

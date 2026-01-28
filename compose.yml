@@ -67,6 +67,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - Docker__Host=unix:///var/run/docker.sock
       - Docker__NetworkName=platform-net
+      - K6__PrometheusUrl=http://prometheus:9090/api/v1/write
       - K6_SCRIPTS_PATH=${PWD}/Infrastructure/k6/scripts
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro

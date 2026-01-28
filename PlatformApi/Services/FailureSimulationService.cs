@@ -1,27 +1,19 @@
 using System.Collections.Concurrent;
-using Docker.DotNet;
 using Docker.DotNet.Models;
 using PlatformApi.Models;
 
 namespace PlatformApi.Services;
 
-public class FailureSimulationService
+public class FailureSimulationService(ILogger<FailureSimulationService> logger, DockerService dockerService)
 {
-    public FailureSimulationService(ILogger<FailureSimulationService> logger, IConfiguration configuration)
-    {
-        _logger = logger;
-        string dockerHost = configuration["Docker:Host"] ?? "unix:///var/run/docker.sock";
-        _dockerClient = new DockerClientConfiguration(new Uri(dockerHost)).CreateClient();
-    }
-
     public async Task<NetworkDelayResponse> ApplyNetworkDelay(NetworkDelayRequest request)
     {
         string failureId = $"pumba-delay-{Guid.NewGuid():N}";
 
         try
         {
-            await PullImageIfNotExistsAsync(PumbaImage);
-            await PullImageIfNotExistsAsync(TcImage);
+            await dockerService.PullImageIfNotExistsAsync(PumbaImage);
+            await dockerService.PullImageIfNotExistsAsync(TcImage);
 
             List<string> cmd =
             [
@@ -41,7 +33,7 @@ public class FailureSimulationService
 
             cmd.Add($"re2:^{request.ContainerName}$");
 
-            CreateContainerResponse? createResponse = await _dockerClient.Containers.CreateContainerAsync(new()
+            CreateContainerResponse? createResponse = await dockerService.Client.Containers.CreateContainerAsync(new()
             {
                 Image = PumbaImage,
                 Name = failureId,
@@ -55,12 +47,11 @@ public class FailureSimulationService
                 Labels = new Dictionary<string, string>
                 {
                     ["platform"] = "distributed-system-platform",
-                    ["type"] = "pumba-failure",
-                    ["failure-type"] = "network-delay"
+                    ["type"] = "pumba-failure"
                 }
             });
 
-            await _dockerClient.Containers.StartContainerAsync(createResponse.ID, new());
+            await dockerService.Client.Containers.StartContainerAsync(createResponse.ID, new());
 
             FailureStatus failure = new(
                 Id: failureId,
@@ -73,7 +64,7 @@ public class FailureSimulationService
 
             _ = MonitorFailureAsync(failureId, createResponse.ID);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Applied network delay of {DelayMs}ms (jitter: {JitterMs}ms) to container {Container} for {Duration}s",
                 request.DelayMs, request.JitterMs, request.ContainerName, request.DurationSeconds);
 
@@ -84,7 +75,7 @@ public class FailureSimulationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to apply network delay to container {Container}", request.ContainerName);
+            logger.LogError(ex, "Failed to apply network delay to container {Container}", request.ContainerName);
             return new(failureId, "failed", ex.Message);
         }
     }
@@ -93,41 +84,26 @@ public class FailureSimulationService
     {
         try
         {
-            IList<ContainerListResponse>? containers = await _dockerClient.Containers.ListContainersAsync(new()
-            {
-                All = true,
-                Filters = new Dictionary<string, IDictionary<string, bool>>
-                {
-                    ["name"] = new Dictionary<string, bool> { [failureId] = true }
-                }
-            });
-
-            ContainerListResponse? container = containers.FirstOrDefault();
+            ContainerListResponse? container = await dockerService.FindContainerByNameAsync(failureId);
             if (container == null)
             {
                 _activeFailures.TryRemove(failureId, out _);
                 return new(failureId, "not_found", "Failure simulation not found");
             }
 
-            await _dockerClient.Containers.StopContainerAsync(container.ID, new()
-            {
-                WaitBeforeKillSeconds = 2
-            });
-
-            await _dockerClient.Containers.RemoveContainerAsync(container.ID,
-                new() { Force = true });
+            await dockerService.StopAndRemoveContainerAsync(container.ID, 2);
 
             if (_activeFailures.TryGetValue(failureId, out FailureStatus? failure))
             {
                 _activeFailures[failureId] = failure with { Status = "stopped" };
             }
 
-            _logger.LogInformation("Stopped failure simulation {FailureId}", failureId);
+            logger.LogInformation("Stopped failure simulation {FailureId}", failureId);
             return new(failureId, "stopped", "Failure simulation stopped");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to stop failure simulation {FailureId}", failureId);
+            logger.LogError(ex, "Failed to stop failure simulation {FailureId}", failureId);
             return new(failureId, "error", ex.Message);
         }
     }
@@ -138,48 +114,21 @@ public class FailureSimulationService
         return new(_activeFailures.Values.ToList());
     }
 
-    public async Task<List<string>> GetAvailableContainersAsync()
-    {
-        IList<ContainerListResponse>? containers = await _dockerClient.Containers.ListContainersAsync(new()
-        {
-            Filters = new Dictionary<string, IDictionary<string, bool>>
-            {
-                ["label"] = new Dictionary<string, bool> { ["platform=distributed-system-platform"] = true },
-                ["status"] = new Dictionary<string, bool> { ["running"] = true }
-            }
-        });
-
-        return containers
-            .Where(c => !c.Names.Any(n => n.Contains("pumba") || n.Contains("k6-job")))
-            .SelectMany(c => c.Names)
-            .Select(n => n.TrimStart('/'))
-            .ToList();
-    }
-
     private async Task MonitorFailureAsync(string failureId, string containerId)
     {
         try
         {
-            ContainerWaitResponse? waitResponse = await _dockerClient.Containers.WaitContainerAsync(containerId);
+            ContainerWaitResponse waitResponse = await dockerService.WaitContainerAsync(containerId, removeAfter: false);
 
             if (_activeFailures.TryGetValue(failureId, out FailureStatus? failure))
             {
                 string status = waitResponse.StatusCode == 0 ? "completed" : "failed";
                 _activeFailures[failureId] = failure with { Status = status };
             }
-
-            try
-            {
-                await _dockerClient.Containers.RemoveContainerAsync(containerId, new());
-            }
-            catch
-            {
-                // ignored
-            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error monitoring failure {FailureId}", failureId);
+            logger.LogError(ex, "Error monitoring failure {FailureId}", failureId);
         }
     }
 
@@ -200,33 +149,7 @@ public class FailureSimulationService
         }
     }
 
-    private async Task PullImageIfNotExistsAsync(string imageName)
-    {
-        try
-        {
-            await _dockerClient.Images.InspectImageAsync(imageName);
-            _logger.LogDebug("Image {Image} already exists", imageName);
-        }
-        catch (DockerImageNotFoundException)
-        {
-            _logger.LogInformation("Pulling image {Image}...", imageName);
-            await _dockerClient.Images.CreateImageAsync(
-                new() { FromImage = imageName },
-                null,
-                new Progress<JSONMessage>(m =>
-                {
-                    if (!string.IsNullOrEmpty(m.Status))
-                    {
-                        _logger.LogDebug("Pull: {Status}", m.Status);
-                    }
-                }));
-            _logger.LogInformation("Image {Image} pulled successfully", imageName);
-        }
-    }
-
     private const string PumbaImage = "gaiaadm/pumba:latest";
     private const string TcImage = "ghcr.io/alexei-led/pumba-alpine-nettools:latest";
-    private readonly DockerClient _dockerClient;
-    private readonly ILogger<FailureSimulationService> _logger;
     private readonly ConcurrentDictionary<string, FailureStatus> _activeFailures = new();
 }

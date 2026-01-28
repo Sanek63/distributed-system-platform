@@ -5,6 +5,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddControllers();
 
+builder.Services.AddSingleton<DockerService>();
 builder.Services.AddSingleton<TrafficGeneratorService>();
 builder.Services.AddSingleton<FailureSimulationService>();
 
