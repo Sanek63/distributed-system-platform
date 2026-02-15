@@ -1,0 +1,34 @@
+services:
+  service-a:
+    build:
+      context: ./ServiceA
+      dockerfile: Dockerfile
+    container_name: service-a
+    environment:
+      - ServiceB__Url=http://service-b
+      - OpenTelemetry__Endpoint=http://otel-collector:4317
+    ports:
+      - "10001:80"
+    labels:
+      - "platform=distributed-system-platform"
+    networks:
+      - platform-network
+
+  service-b:
+    build:
+      context: ./ServiceB
+      dockerfile: Dockerfile
+    container_name: service-b
+    environment:
+      - OpenTelemetry__Endpoint=http://otel-collector:4317
+    ports:
+      - "10002:80"
+    labels:
+      - "platform=distributed-system-platform"
+    networks:
+      - platform-network
+
+networks:
+  platform-network:
+    external: true
+    name: platform-net
