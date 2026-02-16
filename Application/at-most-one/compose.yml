@@ -2,11 +2,12 @@ services:
   service-a:
     build:
       context: ./ServiceA
-      dockerfile: Dockerfile
+      dockerfile: application.dockerfile
     container_name: service-a
     environment:
-      - ServiceB__Url=http://service-b
-      - OpenTelemetry__Endpoint=http://otel-collector:4317
+      - APP_NAME=service-a
+      - SERVICE_B_URL=http://service-b
+      - OPENTELEMETRY_ENDRPOIND=http://otel-collector:4317
     ports:
       - "10001:80"
     labels:
@@ -17,10 +18,11 @@ services:
   service-b:
     build:
       context: ./ServiceB
-      dockerfile: Dockerfile
+      dockerfile: application.dockerfile
     container_name: service-b
     environment:
-      - OpenTelemetry__Endpoint=http://otel-collector:4317
+      - APP_NAME=service-b
+      - OPENTELEMETRY_ENDRPOIND=http://otel-collector:4317
     ports:
       - "10002:80"
     labels:

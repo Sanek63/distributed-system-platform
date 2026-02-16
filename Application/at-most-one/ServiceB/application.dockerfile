@@ -6,6 +6,7 @@ RUN pip install --no-cache-dir -U \
     fastapi \
     uvicorn[standard] \
     httpx \
+    pydantic-settings \
     opentelemetry-api \
     opentelemetry-sdk \
     opentelemetry-semantic-conventions \
@@ -14,9 +15,9 @@ RUN pip install --no-cache-dir -U \
     opentelemetry-instrumentation-fastapi \
     opentelemetry-instrumentation-httpx 
 
-COPY app.py /code/app.py
+COPY . /code
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 80
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
