@@ -14,9 +14,8 @@ def configure_application() -> FastAPI:
 
     app = FastAPI(
         title=config.APP_NAME,
-        middleware=[
-            Middleware(LoggerTracingMiddleware),
-        ]
+        middleware=[Middleware(LoggerTracingMiddleware)],
+
     )
     app.include_router(router_v1)
 

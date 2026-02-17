@@ -6,7 +6,6 @@ import asyncio
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
-r = random.random()
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -17,19 +16,19 @@ class Message(BaseModel):
 
 @router.post("/api/message-b")
 async def receive_message(payload: Message, request: Request):
-    logger.info(
-        f"[service-b][in] {request.method} {request.url.path} "
-        f"traceparent={request.headers.get('traceparent')} baggage={request.headers.get('baggage')}"
-    )
+    logger.info("got request from service-a")
 
-    if r < 0.20:
+    r = random.random()
+
+    if r < 0.2:
         delay_s = random.uniform(1.2, 3.5)
-        logger.info(f"[service-b] random delay {delay_s:.2f}s")
+        logger.info("random delay %.2fs", delay_s)
         await asyncio.sleep(delay_s)
-    elif r < 0.30:
+
+    elif r < 0.3:
         logger.info("[service-b] random failure 500")
         raise HTTPException(status_code=500, detail="Random failure")
 
-    logger.info(f"[service-b] received message={payload.message!r} at={time.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("send ok to service-a")
 
-    return {"status": "ok", "received": payload.message}
+    return {"result": "ok"}

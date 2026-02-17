@@ -2,36 +2,31 @@ import logging
 import asyncio
 import random
 
-from fastapi import APIRouter, Request, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Header
+from pydantic import BaseModel
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-
-class Message(BaseModel):
-    message: str
-    messageId: str | None = Field(default=None)
-
-
 _idempotency_store: dict[str, dict] = {}
 _idempotency_lock = asyncio.Lock()
 
 
+class Message(BaseModel):
+    message: str
+
+
 @router.post("/api/message-b")
-async def receive_message(payload: Message, request: Request):
-    message_id = payload.messageId or request.headers.get("Idempotency-Key")
-    if not message_id:
-        raise HTTPException(status_code=400, detail="Missing messageId / Idempotency-Key")
+async def receive_message(idempotency_key: str = Header(alias="Idempotency-Key")):
 
     async with _idempotency_lock:
-        cached = _idempotency_store.get(message_id)
-        if cached is not None:
-            logger.info(f"[service-b] idempotent hit messageId={message_id}")
+        if (cached := _idempotency_store.get(idempotency_key)) is not None:
+            logger.info(f"[service-b] idempotent request with key={idempotency_key}")
             return cached
 
     r = random.random()
+
     if r < 0.20:
         delay_s = random.uniform(1.2, 3.5)
         logger.info(f"[service-b] random delay {delay_s:.2f}s")
@@ -44,6 +39,6 @@ async def receive_message(payload: Message, request: Request):
     result = {"status": "ok"}
 
     async with _idempotency_lock:
-        _idempotency_store[message_id] = result
+        _idempotency_store[idempotency_key] = result
 
     return result

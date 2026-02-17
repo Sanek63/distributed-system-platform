@@ -64,15 +64,23 @@ LOGGING_CONFIG = {
             "propagate": False
         },
         "uvicorn.error": {
-            "level": "INFO",
-            "handlers": ["default"],
-            "propagate": False
+            "disabled": True
         },
         "uvicorn.access": {
-            "level": "INFO",
-            "handlers": ["default"],
-            "propagate": False
+            "disabled": True
         },
+        "httpx": {
+            "level": "CRITICAL",
+            "handlers": [],
+            "propagate": True,
+            "disabled": True
+        },
+        "httpcore": {
+            "level": "CRITICAL",
+            "handlers": [],
+            "propagate": True,
+            "disabled": True
+        }
     }
 }
 

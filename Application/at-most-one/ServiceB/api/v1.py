@@ -1,7 +1,6 @@
 import logging
-import time
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 
@@ -14,8 +13,9 @@ class Message(BaseModel):
 
 
 @router.post("/api/message-b")
-async def receive_message(payload: Message, request: Request):
-    logger.info(
-        f"from={request.client.host}:{request.client.port} message={payload.message!r}"
-    )
-    return {"status": "ok", "received": payload.message}
+async def receive_message():
+    logger.info("got request from service-a")
+    ...
+    logger.info("send ok to service-a")
+
+    return {"result": "ok"}
