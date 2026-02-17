@@ -31,7 +31,6 @@ curl -X POST "http://localhost:10002/api/message" \
 **Response (200):**
 ```json
 {
-  "status": "ok",
-  "received": "hello"
+  "result": "ok"
 }
 ```
