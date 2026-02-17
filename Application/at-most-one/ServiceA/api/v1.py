@@ -25,6 +25,7 @@ async def accept_and_forward(payload: Message):
                 f"{config.SERVICE_B_URL}/api/message-b",
                 json=payload.model_dump(),
             )
+            resp.raise_for_status()
         except Exception as e:
             raise HTTPException(
                 status_code=502,

@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 
@@ -16,6 +16,5 @@ class Message(BaseModel):
 async def receive_message():
     logger.info("got request from service-a")
     ...
-    logger.info("send ok to service-a")
 
-    return {"result": "ok"}
+    raise HTTPException(status_code=502, detail="some error")
