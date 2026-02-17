@@ -21,7 +21,7 @@ class Message(BaseModel):
 @router.post("/api/message-a")
 async def accept_and_forward(payload: Message):
     attempt_number = 0
-    attempt_count = 0
+    attempt_count = 3
 
     idempotency_key = str(uuid.uuid4())
 
@@ -32,7 +32,7 @@ async def accept_and_forward(payload: Message):
     ):
         attempt_number += 1
 
-        logger.info(f"{attempt_number}/{attempt_count} sent to service-b. IdempotencyKey={idempotency_key}")
+        logger.info(f"{attempt_number}/{attempt_count} sent request to service-b with IdempotencyKey={idempotency_key}")
 
         with attempt:
             async with httpx.AsyncClient(timeout=2) as client:

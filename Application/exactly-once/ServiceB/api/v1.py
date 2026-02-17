@@ -18,7 +18,10 @@ class Message(BaseModel):
 
 
 @router.post("/api/message-b")
-async def receive_message(idempotency_key: str = Header(alias="Idempotency-Key")):
+async def receive_message(
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+):
+    logger.info("got request from service-a")
 
     async with _idempotency_lock:
         if (cached := _idempotency_store.get(idempotency_key)) is not None:
@@ -40,5 +43,7 @@ async def receive_message(idempotency_key: str = Header(alias="Idempotency-Key")
 
     async with _idempotency_lock:
         _idempotency_store[idempotency_key] = result
+
+    logger.info("send ok to service-a")
 
     return result
