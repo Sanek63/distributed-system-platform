@@ -1,7 +1,6 @@
 import httpx
 import logging
 
-from fastapi import HTTPException
 from fastapi import APIRouter
 from pydantic import BaseModel
 from tenacity import AsyncRetrying, stop_after_attempt, wait_fixed
@@ -20,7 +19,7 @@ class Message(BaseModel):
 @router.post("/api/message-a")
 async def accept_and_forward(payload: Message):
     attempt_number = 0
-    attempt_count = 0
+    attempt_count = 3
 
     async for attempt in AsyncRetrying(
         stop=stop_after_attempt(attempt_count),

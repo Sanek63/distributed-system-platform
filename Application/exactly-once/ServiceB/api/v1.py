@@ -1,8 +1,8 @@
 import logging
 import asyncio
-import random
+import time
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, Header
 from pydantic import BaseModel
 
 
@@ -18,9 +18,7 @@ class Message(BaseModel):
 
 
 @router.post("/api/message-b")
-async def receive_message(
-    idempotency_key: str = Header(alias="Idempotency-Key"),
-):
+async def receive_message(idempotency_key: str = Header(alias="Idempotency-Key")):
     logger.info("got request from service-a")
 
     async with _idempotency_lock:
@@ -28,19 +26,9 @@ async def receive_message(
             logger.info(f"[service-b] idempotent request with key={idempotency_key}")
             return cached
 
-    r = random.random()
-
-    if r < 0.20:
-        delay_s = random.uniform(1.2, 3.5)
-        logger.info(f"[service-b] random delay {delay_s:.2f}s")
-        await asyncio.sleep(delay_s)
-
-    elif r < 0.30:
-        logger.info("[service-b] random failure 500")
-        raise HTTPException(status_code=500, detail="Random failure")
+    time.sleep(0.3)  # some operations
 
     result = {"status": "ok"}
-
     async with _idempotency_lock:
         _idempotency_store[idempotency_key] = result
 
