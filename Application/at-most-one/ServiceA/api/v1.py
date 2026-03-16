@@ -36,7 +36,7 @@ async def accept_and_forward(payload: Message):
                 json=payload.model_dump(),
             )
             logger.info(
-                "[scenario-1][request-%d] service-b status=%d (response is not validated)",
+                "[scenario-1][request-%d] service-b status=%d (status is logged, but no retries/checks are applied)",
                 _stats["total_requests"],
                 resp.status_code,
             )
