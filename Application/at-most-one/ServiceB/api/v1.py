@@ -28,7 +28,6 @@ async def receive_message(payload: Message):
 
     if random.random() < 0.35:
         _stats["failed_requests"] += 1
-        logger.info("[scenario-1] simulated network failure: message lost")
         logger.info(
             "[scenario-1][at-most-once] total_requests=%d accepted_requests=%d failed_requests=%d",
             _stats["total_requests"],

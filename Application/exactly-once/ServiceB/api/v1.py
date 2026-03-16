@@ -65,7 +65,6 @@ async def receive_message(
                 _stats["duplicate_hits"],
                 _stats["failed_requests"],
             )
-        logger.info("[service-b] random failure 500")
         raise HTTPException(status_code=500, detail="Random failure")
 
     result = {"status": "ok"}

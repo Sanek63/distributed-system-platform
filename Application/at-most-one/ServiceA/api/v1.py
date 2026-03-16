@@ -40,13 +40,8 @@ async def accept_and_forward(payload: Message):
                 _stats["total_requests"],
                 resp.status_code,
             )
-    except httpx.HTTPError as exc:
+    except httpx.HTTPError:
         _stats["delivery_failures"] += 1
-        logger.warning(
-            "[scenario-1][request-%d] fire-and-forget delivery failed: %s",
-            _stats["total_requests"],
-            exc,
-        )
 
     logger.info(
         "[scenario-1][at-most-once] total_requests=%d total_outbound_requests=%d retries=0 delivery_failures=%d",

@@ -35,7 +35,6 @@ async def receive_message(payload: Message, request: Request):
 
     elif r < 0.3:
         _stats["failed_requests"] += 1
-        logger.info("[service-b] random failure 500")
         logger.info(
             "[scenario-2][service-b] total_requests=%d successful_requests=%d failed_requests=%d delayed_requests=%d",
             _stats["total_requests"],

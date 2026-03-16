@@ -65,15 +65,8 @@ async def accept_and_forward(payload: Message):
                     resp.text,
                 )
         _stats["succeeded_requests"] += 1
-    except Exception as exc:
+    except Exception:
         _stats["failed_requests"] += 1
-        logger.error(
-            "[scenario-3][request-%d] failed after %d attempts with IdempotencyKey=%s: %s",
-            request_number,
-            attempt_number,
-            idempotency_key,
-            exc,
-        )
         raise
     finally:
         retries_made = max(attempt_number - 1, 0)
