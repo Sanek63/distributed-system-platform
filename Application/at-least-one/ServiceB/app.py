@@ -1,10 +1,9 @@
 import os
-import time
 import logging
 import random
 import asyncio
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from opentelemetry import metrics, trace
@@ -37,6 +36,12 @@ logging.basicConfig(
     format="%(levelname)s:%(name)s:[trace_id=%(trace_id)s span_id=%(span_id)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
+_stats = {
+    "total_requests": 0,
+    "delayed_requests": 0,
+    "failed_requests": 0,
+    "successful_requests": 0,
+}
 
 
 app = FastAPI()
@@ -63,21 +68,19 @@ class Message(BaseModel):
 
 
 @app.post("/api/message-b")
-async def receive_message(payload: Message, request: Request):
-    logger.info(
-        f"[service-b][in] {request.method} {request.url.path} "
-        f"traceparent={request.headers.get('traceparent')} baggage={request.headers.get('baggage')}"
-    )
-
+async def receive_message(payload: Message):
+    _stats["total_requests"] += 1
     r = random.random()
     if r < 0.20:
         delay_s = random.uniform(1.2, 3.5)
-        logger.info(f"[service-b] random delay {delay_s:.2f}s")
+        _stats["delayed_requests"] += 1
         await asyncio.sleep(delay_s)
     elif r < 0.30:
-        logger.info("[service-b] random failure 500")
+        _stats["failed_requests"] += 1
+        logger.info("%s", _stats)
         raise HTTPException(status_code=500, detail="Random failure")
 
-    logger.info(f"[service-b] received message={payload.message!r} at={time.strftime('%Y-%m-%d %H:%M:%S')}")
+    _stats["successful_requests"] += 1
+    logger.info("%s", _stats)
 
     return {"status": "ok", "received": payload.message}

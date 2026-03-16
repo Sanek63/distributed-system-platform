@@ -27,7 +27,6 @@ class Message(BaseModel):
 @router.post("/api/message-a")
 async def accept_and_forward(payload: Message):
     _stats["total_requests"] += 1
-    request_number = _stats["total_requests"]
     attempt_number = 0
     attempt_count = 3
 
@@ -42,28 +41,14 @@ async def accept_and_forward(payload: Message):
             attempt_number += 1
             _stats["total_http_attempts"] += 1
 
-            logger.info(
-                "[scenario-3][request-%d][%d/%d] send request to service-b with IdempotencyKey=%s",
-                request_number,
-                attempt_number,
-                attempt_count,
-                idempotency_key,
-            )
-
             with attempt:
                 async with httpx.AsyncClient(timeout=2) as client:
-                    resp = await client.post(
+                    response = await client.post(
                         f"{config.SERVICE_B_URL}/api/message-b",
                         json=payload.model_dump(),
                         headers={"Idempotency-Key": idempotency_key},
                     )
-                    resp.raise_for_status()
-
-                logger.info(
-                    "[scenario-3][request-%d] got response from service-b: %s",
-                    request_number,
-                    resp.text,
-                )
+                    response.raise_for_status()
         _stats["succeeded_requests"] += 1
     except Exception:
         _stats["failed_requests"] += 1
@@ -71,17 +56,6 @@ async def accept_and_forward(payload: Message):
     finally:
         retries_made = max(attempt_number - 1, 0)
         _stats["total_retries"] += retries_made
-        logger.info(
-            "[scenario-3][exactly-once] request=%d idempotency_key=%s attempts=%d retries=%d total_requests=%d total_http_attempts=%d total_retries=%d succeeded_requests=%d failed_requests=%d",
-            request_number,
-            idempotency_key,
-            attempt_number,
-            retries_made,
-            _stats["total_requests"],
-            _stats["total_http_attempts"],
-            _stats["total_retries"],
-            _stats["succeeded_requests"],
-            _stats["failed_requests"],
-        )
+        logger.info("%s", _stats)
 
     return {"result": "ok"}
