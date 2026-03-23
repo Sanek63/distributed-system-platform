@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 _stats = {
     "total_requests": 0,
     "delayed_requests": 0,

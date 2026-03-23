@@ -44,11 +44,12 @@ async def accept_and_forward(payload: Message):
                         f"{config.SERVICE_B_URL}/api/message-b",
                         json=payload.model_dump(),
                     )
-                    response.raise_for_status()
+
         _stats["succeeded_requests"] += 1
+
     except Exception:
         _stats["failed_requests"] += 1
-        raise
+
     finally:
         retries_made = max(attempt_number - 1, 0)
         _stats["total_retries"] += retries_made
